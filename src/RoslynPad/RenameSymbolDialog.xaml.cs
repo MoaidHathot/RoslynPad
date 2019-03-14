@@ -2,6 +2,7 @@
 using System.Composition;
 using System.Runtime.CompilerServices;
 using System.Text.RegularExpressions;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Input;
 using Avalon.Windows.Controls;
@@ -18,10 +19,12 @@ namespace RoslynPad
     {
         private static readonly Regex _identifierRegex = new Regex(@"^(?:((?!\d)\w+(?:\.(?!\d)\w+)*)\.)?((?!\d)\w+)$");
 
-        private string _symbolName;
-        private InlineModalDialog _dialog;
+        private string? _symbolName;
+        private InlineModalDialog? _dialog;
 
+#pragma warning disable CS8618 // Non-nullable field is uninitialized.
         public RenameSymbolDialog()
+#pragma warning restore CS8618 // Non-nullable field is uninitialized.
         {
             DataContext = this;
             InitializeComponent();
@@ -40,9 +43,10 @@ namespace RoslynPad
 
         public bool ShouldRename { get; private set; }
 
-        public string SymbolName
+        public string? SymbolName
         {
-            get => _symbolName; set
+            get => _symbolName;
+            set
             {
                 _symbolName = value;
                 OnPropertyChanged();
@@ -79,7 +83,7 @@ namespace RoslynPad
             }
         }
 
-        public void Show()
+        public Task ShowAsync()
         {
             _dialog = new InlineModalDialog
             {
@@ -87,6 +91,7 @@ namespace RoslynPad
                 Content = this
             };
             _dialog.Show();
+            return Task.CompletedTask;
         }
 
         public void Close()
@@ -97,7 +102,7 @@ namespace RoslynPad
         public event PropertyChangedEventHandler PropertyChanged;
 
         [NotifyPropertyChangedInvocator]
-        protected virtual void OnPropertyChanged([CallerMemberName] string propertyName = null)
+        protected virtual void OnPropertyChanged([CallerMemberName] string? propertyName = null)
         {
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
         }

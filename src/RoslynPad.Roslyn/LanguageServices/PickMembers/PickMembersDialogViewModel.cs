@@ -41,10 +41,7 @@ namespace RoslynPad.Roslyn.LanguageServices.PickMembers
         private int? _selectedIndex;
         public int? SelectedIndex
         {
-            get
-            {
-                return _selectedIndex;
-            }
+            get => _selectedIndex;
 
             set
             {
@@ -67,7 +64,7 @@ namespace RoslynPad.Roslyn.LanguageServices.PickMembers
         {
             get
             {
-                if (!CanMoveUp)
+                if (!CanMoveUp || SelectedIndex == null)
                 {
                     return string.Empty;
                 }
@@ -80,7 +77,7 @@ namespace RoslynPad.Roslyn.LanguageServices.PickMembers
         {
             get
             {
-                if (!CanMoveDown)
+                if (!CanMoveDown || SelectedIndex == null)
                 {
                     return string.Empty;
                 }
@@ -122,6 +119,7 @@ namespace RoslynPad.Roslyn.LanguageServices.PickMembers
         internal void MoveUp()
         {
             Debug.Assert(CanMoveUp);
+            if (SelectedIndex == null) return;
 
             var index = SelectedIndex.Value;
             Move(MemberContainers, index, delta: -1);
@@ -130,6 +128,7 @@ namespace RoslynPad.Roslyn.LanguageServices.PickMembers
         internal void MoveDown()
         {
             Debug.Assert(CanMoveDown);
+            if (SelectedIndex == null) return;
 
             var index = SelectedIndex.Value;
             Move(MemberContainers, index, delta: 1);
@@ -163,7 +162,7 @@ namespace RoslynPad.Roslyn.LanguageServices.PickMembers
             private bool _isChecked;
             public bool IsChecked
             {
-                get { return _isChecked; }
+                get => _isChecked;
                 set { SetProperty(ref _isChecked, value); }
             }
 

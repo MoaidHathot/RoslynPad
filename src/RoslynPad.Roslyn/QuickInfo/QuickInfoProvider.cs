@@ -28,7 +28,7 @@ namespace RoslynPad.Roslyn.QuickInfo
             _contentProvider = contentProvider;
         }
 
-        public async Task<QuickInfoItem> GetItemAsync(
+        public async Task<QuickInfoItem?> GetItemAsync(
             Document document,
             int position,
             CancellationToken cancellationToken)
@@ -60,13 +60,13 @@ namespace RoslynPad.Roslyn.QuickInfo
             return !token.Parent.IsKind(SyntaxKind.XmlCrefAttribute);
         }
 
-        private async Task<QuickInfoItem> GetQuickInfoItemAsync(
+        private async Task<QuickInfoItem?> GetQuickInfoItemAsync(
             Document document,
             SyntaxToken token,
             int position,
             CancellationToken cancellationToken)
         {
-            if (token != default(SyntaxToken) &&
+            if (token != default &&
                 token.Span.IntersectsWith(position))
             {
                 var deferredContent = await BuildContentAsync(document, token, cancellationToken).ConfigureAwait(false);
@@ -79,7 +79,7 @@ namespace RoslynPad.Roslyn.QuickInfo
             return null;
         }
 
-        private async Task<IDeferredQuickInfoContent> BuildContentAsync(
+        private async Task<IDeferredQuickInfoContent?> BuildContentAsync(
             Document document,
             SyntaxToken token,
             CancellationToken cancellationToken)
@@ -125,7 +125,7 @@ namespace RoslynPad.Roslyn.QuickInfo
                 var linkedDocument = document.Project.Solution.GetDocument(link);
                 var linkedToken = await FindTokenInLinkedDocument(token, linkedDocument, cancellationToken).ConfigureAwait(false);
 
-                if (linkedToken != default(SyntaxToken))
+                if (linkedToken != default)
                 {
                     // Not in an inactive region, so this file is a candidate.
                     candidateProjects.Add(link.ProjectId);
@@ -167,7 +167,7 @@ namespace RoslynPad.Roslyn.QuickInfo
         {
             if (!linkedDocument.SupportsSyntaxTree)
             {
-                return default(SyntaxToken);
+                return default;
             }
 
             var root = await linkedDocument.GetSyntaxRootAsync(cancellationToken).ConfigureAwait(false);
@@ -181,7 +181,7 @@ namespace RoslynPad.Roslyn.QuickInfo
                 return linkedToken;
             }
 
-            return default(SyntaxToken);
+            return default;
         }
 
         private async Task<IDeferredQuickInfoContent> CreateContentAsync(
@@ -189,7 +189,7 @@ namespace RoslynPad.Roslyn.QuickInfo
             SyntaxToken token,
             SemanticModel semanticModel,
             IEnumerable<ISymbol> symbols,
-            SupportedPlatformData supportedPlatforms,
+            SupportedPlatformData? supportedPlatforms,
             CancellationToken cancellationToken)
         {
             var descriptionService = workspace.Services.GetLanguageServices(token.Language).GetService<ISymbolDisplayService>();
@@ -468,7 +468,7 @@ namespace RoslynPad.Roslyn.QuickInfo
             IList<TaggedText> usageText,
             IList<TaggedText> exceptionText);
 
-        IDeferredQuickInfoContent CreateDocumentationCommentDeferredContent(string documentationComment);
+        IDeferredQuickInfoContent CreateDocumentationCommentDeferredContent(string? documentationComment);
 
         IDeferredQuickInfoContent CreateClassifiableDeferredContent(IList<TaggedText> content);
     }

@@ -1,10 +1,8 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Composition;
 using System.Reflection;
 using RoslynPad.UI;
 using System.Collections.Immutable;
-using RoslynPad.UI.Services;
 
 namespace RoslynPad
 {
@@ -16,8 +14,8 @@ namespace RoslynPad
         {
         }
 
-        protected override IEnumerable<Assembly> CompositionAssemblies => ImmutableArray.Create(
-            Assembly.Load(new AssemblyName("RoslynPad.Roslyn.Avalonia")),
-            Assembly.Load(new AssemblyName("RoslynPad.Editor.Avalonia")));
+        protected override ImmutableArray<Assembly> CompositionAssemblies => base.CompositionAssemblies
+            .Add(Assembly.Load(new AssemblyName("RoslynPad.Roslyn.Avalonia")))
+            .Add(Assembly.Load(new AssemblyName("RoslynPad.Editor.Avalonia")));
     }
 }

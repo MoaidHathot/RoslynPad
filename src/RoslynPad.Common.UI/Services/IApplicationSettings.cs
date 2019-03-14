@@ -11,17 +11,19 @@ namespace RoslynPad.UI
         void LoadFrom(string path);
 
         bool SendErrors { get; set; }
-        string LatestVersion { get; set; }
-        string WindowBounds { get; set; }
-        string DockLayout { get; set; }
-        string WindowState { get; set; }
+        bool EnableBraceCompletion { get; set; }
+        string? LatestVersion { get; set; }
+        string? WindowBounds { get; set; }
+        string? DockLayout { get; set; }
+        string? WindowState { get; set; }
         double EditorFontSize { get; set; }
-        string DocumentPath { get; set; }
+        string? DocumentPath { get; set; }
         bool SearchFileContents { get; set; }
         bool SearchUsingRegex { get; set; }
         bool OptimizeCompilation { get; set; }
         int LiveModeDelayMs { get; set; }
         bool SearchWhileTyping { get; set; }
+        string DefaultPlatformName { get; set; }
     }
 
     [Export(typeof(IApplicationSettings)), Shared]
@@ -31,25 +33,28 @@ namespace RoslynPad.UI
         private const int EditorFontSizeDefault = 12;
 
         private readonly ITelemetryProvider _telemetryProvider;
-        private string _path;
+        private string? _path;
 
         private bool _sendErrors;
-        private string _latestVersion;
-        private string _windowBounds;
-        private string _dockLayout;
-        private string _windowState;
+        private string? _latestVersion;
+        private string? _windowBounds;
+        private string? _dockLayout;
+        private string? _windowState;
         private double _editorFontSize = EditorFontSizeDefault;
-        private string _documentPath;
+        private string? _documentPath;
         private bool _searchFileContents;
         private bool _searchUsingRegex;
         private bool _optimizeCompilation;
         private int _liveModeDelayMs = LiveModeDelayMsDefault;
         private bool _searchWhileTyping;
+        private bool _enableBraceCompletion = true;
+        private string _defaultPlatformName;
 
         [ImportingConstructor]
         public ApplicationSettings(ITelemetryProvider telemetryProvider)
         {
             _telemetryProvider = telemetryProvider;
+            _defaultPlatformName = string.Empty;
         }
 
         public void LoadFrom(string path)
@@ -67,25 +72,31 @@ namespace RoslynPad.UI
             set => SetProperty(ref _sendErrors, value);
         }
 
-        public string LatestVersion
+        public bool EnableBraceCompletion
+        {
+            get => _enableBraceCompletion;
+            set => SetProperty(ref _enableBraceCompletion, value);
+        }
+
+        public string? LatestVersion
         {
             get => _latestVersion;
             set => SetProperty(ref _latestVersion, value);
         }
 
-        public string WindowBounds
+        public string? WindowBounds
         {
             get => _windowBounds;
             set => SetProperty(ref _windowBounds, value);
         }
 
-        public string DockLayout
+        public string? DockLayout
         {
             get => _dockLayout;
             set => SetProperty(ref _dockLayout, value);
         }
 
-        public string WindowState
+        public string? WindowState
         {
             get => _windowState;
             set => SetProperty(ref _windowState, value);
@@ -97,7 +108,7 @@ namespace RoslynPad.UI
             set => SetProperty(ref _editorFontSize, value);
         }
 
-        public string DocumentPath
+        public string? DocumentPath
         {
             get => _documentPath;
             set => SetProperty(ref _documentPath, value);
@@ -130,10 +141,16 @@ namespace RoslynPad.UI
         public bool SearchWhileTyping
         {
             get => _searchWhileTyping;
-            set => SetProperty (ref _searchWhileTyping, value);
+            set => SetProperty(ref _searchWhileTyping, value);
         }
 
-        protected override void OnPropertyChanged(string propertyName = null)
+        public string DefaultPlatformName
+        {
+            get => _defaultPlatformName;
+            set => SetProperty(ref _defaultPlatformName, value);
+        }
+
+        protected override void OnPropertyChanged(string? propertyName = null)
         {
             base.OnPropertyChanged(propertyName);
 
@@ -150,7 +167,7 @@ namespace RoslynPad.UI
 
             try
             {
-                var serializer = new JsonSerializer();
+                var serializer = new JsonSerializer { DefaultValueHandling = DefaultValueHandling.Ignore };
                 using (var reader = File.OpenText(path))
                 {
                     serializer.Populate(reader, this);
@@ -173,10 +190,10 @@ namespace RoslynPad.UI
         private void SaveSettings()
         {
             if (_path == null) return;
-            
+
             try
             {
-                var serializer = new JsonSerializer {Formatting = Formatting.Indented};
+                var serializer = new JsonSerializer { Formatting = Formatting.Indented };
                 using (var writer = File.CreateText(_path))
                 {
                     serializer.Serialize(writer, this);

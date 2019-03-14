@@ -21,13 +21,13 @@ namespace RoslynPad.Roslyn.Diagnostics
                 new HostDiagnosticAnalyzerPackage(LanguageNames.CSharp,
                     ImmutableArray.Create(
                         // Microsoft.CodeAnalysis
-                        typeof(Compilation).GetTypeInfo().Assembly.GetLocation(),
+                        typeof(Compilation).Assembly.Location,
                         // Microsoft.CodeAnalysis.CSharp
-                        typeof(CSharpResources).GetTypeInfo().Assembly.GetLocation(),
+                        typeof(CSharpResources).Assembly.Location,
                         // Microsoft.CodeAnalysis.Features
-                        typeof(FeaturesResources).GetTypeInfo().Assembly.GetLocation(),
+                        typeof(FeaturesResources).Assembly.Location,
                         // Microsoft.CodeAnalysis.CSharp.Features
-                        typeof(CSharpFeaturesResources).GetTypeInfo().Assembly.GetLocation()))  
+                        typeof(CSharpFeaturesResources).Assembly.Location))  
             };
         }
 
@@ -46,13 +46,13 @@ namespace RoslynPad.Roslyn.Diagnostics
         }
     }
 
-    internal class SimpleAnalyzerAssemblyLoader : AnalyzerAssemblyLoader
+    internal class SimpleAnalyzerAssemblyLoader : Microsoft.CodeAnalysis.AnalyzerAssemblyLoader
     {
         public static IAnalyzerAssemblyLoader Instance { get; } = new SimpleAnalyzerAssemblyLoader();
 
         protected override Assembly LoadFromPathImpl(string fullPath)
         {
-            return Assembly.Load(new AssemblyName(Path.GetFileNameWithoutExtension(fullPath)));
+            return Assembly.Load(AssemblyName.GetAssemblyName(fullPath));
         }
     }
 }

@@ -12,20 +12,20 @@ namespace RoslynPad.Roslyn.Rename
 {
     public static class RenameHelper
     {
-        public static async Task<ISymbol> GetRenameSymbol(
-            Document document, int position, CancellationToken cancellationToken = default(CancellationToken))
+        public static async Task<ISymbol?> GetRenameSymbol(
+            Document document, int position, CancellationToken cancellationToken = default)
         {
             var token = await document.GetTouchingWordAsync(position, cancellationToken).ConfigureAwait(false);
-            return token != default(SyntaxToken) 
+            return token != default 
                     ? await GetRenameSymbol(document, token, cancellationToken).ConfigureAwait(false)
                     : null;
         }
 
-        public static async Task<ISymbol> GetRenameSymbol(
+        public static async Task<ISymbol?> GetRenameSymbol(
             Document document, SyntaxToken triggerToken, CancellationToken cancellationToken)
         {
             var syntaxFactsService = document.Project.LanguageServices.GetService<ISyntaxFactsService>();
-            if (syntaxFactsService.IsKeyword(triggerToken))
+            if (syntaxFactsService.IsReservedOrContextualKeyword(triggerToken))
             {
                 return null;
             }

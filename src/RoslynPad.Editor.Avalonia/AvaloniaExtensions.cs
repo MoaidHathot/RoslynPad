@@ -4,7 +4,6 @@ using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Media;
 using Avalonia.Threading;
-using RoslynPad.Utilities;
 using System;
 using System.Collections.Generic;
 
@@ -55,11 +54,15 @@ namespace RoslynPad.Editor
             return freezable.ToImmutable();
         }
 
-        // nop
-        public static void Freeze(this Pen pen) { }
+        public static void Freeze(this Pen pen)
+        {
+            // nop
+        }
 
-        // nop
-        public static void Freeze(this Geometry geometry) { }
+        public static void Freeze(this Geometry geometry)
+        {
+            // nop
+        }
 
         public static void PolyLineTo(this StreamGeometryContext context, IList<Point> points, bool isStroked, bool isSmoothJoin)
         {
@@ -71,7 +74,7 @@ namespace RoslynPad.Editor
 
         public static void SetBorderThickness(this TemplatedControl control, double thickness)
         {
-            control.BorderThickness = thickness;
+            control.BorderThickness = new Thickness(thickness);
         }
 
         public static void Close(this PopupRoot window) => window.Hide();
@@ -79,17 +82,9 @@ namespace RoslynPad.Editor
         public static bool HasModifiers(this KeyEventArgs args, InputModifiers modifier) =>
             (args.Modifiers & modifier) == modifier;
 
-        // workaround for Avalonia missing a settable ToolTip.IsOpen property
-        private static Action<object, PointerEventArgs> ToolTipOpen = ReflectionUtil.CreateDelegate<Action<object, PointerEventArgs>>(typeof(ToolTip), "ControlPointerEnter");
-        private static Action<object, PointerEventArgs> ToolTipClose = ReflectionUtil.CreateDelegate<Action<object, PointerEventArgs>>(typeof(ToolTip), "ControlPointerLeave");
+        public static void Open(this ToolTip toolTip, Control control) => ToolTip.SetIsOpen(control, true);
 
-        public static void Open(this ToolTip toolTip, IControl control)
-        {
-            ToolTipClose(control, null);
-            ToolTipOpen(control, null);
-        }
-
-        public static void Close(this ToolTip toolTip, IControl control) => ToolTipClose(control, null);
+        public static void Close(this ToolTip toolTip, Control control) => ToolTip.SetIsOpen(control, false);
 
         public static void SetContent(this ToolTip toolTip, Control control, object content) => ToolTip.SetTip(control, content);
 

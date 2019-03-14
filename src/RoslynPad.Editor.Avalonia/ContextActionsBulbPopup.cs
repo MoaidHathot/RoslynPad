@@ -21,20 +21,19 @@ using System.Globalization;
 using System.Windows.Input;
 using Avalonia.Controls;
 using AvaloniaEdit;
-using Avalonia.Media.Imaging;
 using Avalonia.Media;
 using Avalonia.Styling;
 using System.Linq;
 using Avalonia.Input;
-using Avalonia.Markup.Xaml.Data;
-using Avalonia.Markup;
+using Avalonia.Data;
+using Avalonia.Data.Converters;
 
 namespace RoslynPad.Editor
 {
     internal sealed class ContextActionsBulbPopup : ExtendedPopup
     {
         private readonly MenuItem _mainItem;
-        private readonly Image _headerImage;
+        private readonly DrawingPresenter _headerImage;
         private bool _isOpen;
 
         public ContextActionsBulbPopup(Control parent) : base(parent)
@@ -43,7 +42,7 @@ namespace RoslynPad.Editor
 
             StaysOpen = true;
 
-            _headerImage = new Image();
+            _headerImage = new DrawingPresenter();
 
             _mainItem = new MenuItem
             {
@@ -80,10 +79,10 @@ namespace RoslynPad.Editor
             Child = menu;
         }
 
-        public IBitmap Icon
+        public Drawing? Icon
         {
-            get => _headerImage.Source;
-            set => _headerImage.Source = value;
+            get => _headerImage.Drawing;
+            set => _headerImage.Drawing = value;
         }
 
         public event EventHandler MenuOpened;
@@ -103,7 +102,7 @@ namespace RoslynPad.Editor
             return style;
         }
 
-        public System.Collections.IEnumerable ItemsSource
+        public System.Collections.IEnumerable? ItemsSource
         {
             get => _mainItem.Items;
             set => _mainItem.Items = value;
@@ -129,7 +128,7 @@ namespace RoslynPad.Editor
             set => _mainItem.IsSubMenuOpen = value;
         }
 
-        public Func<object, ICommand> CommandProvider { get; set; }
+        public Func<object, ICommand?>? CommandProvider { get; set; }
 
         public new void Focus()
         {
@@ -178,7 +177,7 @@ namespace RoslynPad.Editor
                 _owner = owner;
             }
 
-            public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+            public object? Convert(object value, Type targetType, object parameter, CultureInfo culture)
             {
                 return _owner.CommandProvider?.Invoke(value);
             }

@@ -14,7 +14,7 @@ namespace RoslynPad.Roslyn.AutomaticCompletion
 {
     internal static class Extensions
     {
-        public static Document Format(this Document document, TextSpan span, IEnumerable<IFormattingRule> rules, CancellationToken cancellationToken)
+        public static Document Format(this Document document, TextSpan span, IEnumerable<IFormattingRule>? rules, CancellationToken cancellationToken)
         {
             rules = GetFormattingRules(document, rules, span);
             var syntaxRoot = document.GetSyntaxRootSynchronously(cancellationToken);
@@ -36,7 +36,7 @@ namespace RoslynPad.Roslyn.AutomaticCompletion
             return document;
         }
 
-        private static IEnumerable<IFormattingRule> GetFormattingRules(Document document, IEnumerable<IFormattingRule> rules, TextSpan span)
+        private static IEnumerable<IFormattingRule> GetFormattingRules(Document document, IEnumerable<IFormattingRule>? rules, TextSpan span)
         {
             var ruleFactoryService = document.Project.Solution.Workspace.Services.GetService<IHostDependentFormattingRuleFactoryService>();
             int position = (span.Start + span.End) / 2;
@@ -66,7 +66,7 @@ namespace RoslynPad.Roslyn.AutomaticCompletion
         /// <summary>
         /// insert text to workspace and get updated version of the document
         /// </summary>
-        public static Document InsertText(this Document document, int position, string text, CancellationToken cancellationToken = default(CancellationToken))
+        public static Document InsertText(this Document document, int position, string text, CancellationToken cancellationToken = default)
         {
             return document.ReplaceText(new TextSpan(position, 0), text, cancellationToken);
         }
@@ -107,7 +107,7 @@ namespace RoslynPad.Roslyn.AutomaticCompletion
         /// <summary>
         /// Update the solution so that the document with the Id has the text changes
         /// </summary>
-        public static Solution UpdateDocument(this Solution solution, DocumentId id, IEnumerable<TextChange> textChanges, CancellationToken cancellationToken = default(CancellationToken))
+        public static Solution UpdateDocument(this Solution solution, DocumentId id, IEnumerable<TextChange> textChanges, CancellationToken cancellationToken = default)
         {
             var oldDocument = solution.GetDocument(id);
             var newText = oldDocument.GetTextAsync(cancellationToken).WaitAndGetResult(cancellationToken).WithChanges(textChanges);

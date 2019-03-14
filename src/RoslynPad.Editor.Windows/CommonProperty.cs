@@ -6,8 +6,8 @@ namespace RoslynPad.Editor
     public static class CommonProperty
     {
         public static StyledProperty<TValue> Register<TOwner, TValue>(string name,
-            TValue defaultValue = default(TValue), PropertyOptions options = PropertyOptions.None,
-            Action<TOwner, CommonPropertyChangedArgs<TValue>> onChanged = null)
+            TValue defaultValue = default, PropertyOptions options = PropertyOptions.None,
+            Action<TOwner, CommonPropertyChangedArgs<TValue>>? onChanged = null)
             where TOwner : DependencyObject
         {
             var metadataOptions = FrameworkPropertyMetadataOptions.None;

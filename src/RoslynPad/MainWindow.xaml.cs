@@ -24,7 +24,9 @@ namespace RoslynPad
         private bool _isClosing;
         private bool _isClosed;
 
+#pragma warning disable CS8618 // Non-nullable field is uninitialized.
         internal MainWindow()
+#pragma warning restore CS8618 // Non-nullable field is uninitialized.
         {
             Loaded += OnLoaded;
 
@@ -90,7 +92,7 @@ namespace RoslynPad
                 try
                 {
                     var bounds = Rect.Parse(boundsString);
-                    if (bounds != default(Rect))
+                    if (bounds != default)
                     {
                         Left = bounds.Left;
                         Top = bounds.Top;
@@ -161,7 +163,7 @@ namespace RoslynPad
 
         private void ViewErrorDetails_OnClick(object sender, RoutedEventArgs e)
         {
-            if (!_viewModel.HasError) return;
+            if (_viewModel.LastError == null) return;
 
             TaskDialog.ShowInline(this, "Unhandled Exception",
                 _viewModel.LastError.ToAsyncString(), string.Empty, TaskDialogButtons.Close);

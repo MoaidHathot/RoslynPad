@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using System.Composition;
 using System.Threading.Tasks;
 using System.Windows;
@@ -25,7 +24,7 @@ namespace RoslynPad
 
         public FileDialogFilter Filter
         {
-            set => _dialog.Filter = value?.ToString();
+            set => _dialog.Filter = value + string.Empty;
         }
 
         public string InitialDirectory
@@ -40,11 +39,14 @@ namespace RoslynPad
             set => _dialog.FileName = value;
         }
 
-        public IList<string> FileNames => _dialog.FileNames;
-
-        public Task<bool> ShowAsync()
+        public Task<string[]?> ShowAsync()
         {
-            return Task.FromResult(_dialog.ShowDialog(Application.Current.MainWindow) == true);
+            if (_dialog.ShowDialog(Application.Current.MainWindow) == true)
+            {
+                return Task.FromResult(_dialog.FileNames);
+            }
+
+            return Task.FromResult<string[]?>(null);
         }
     }
 }

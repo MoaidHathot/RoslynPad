@@ -86,7 +86,7 @@ namespace RoslynPad.Roslyn.AutomaticCompletion
             return SpecializedCollections.SingletonEnumerable(BraceCompletionFormattingRule.Instance).Concat(Formatter.GetDefaultFormattingRules(document));
         }
 
-        private void FormatTrackingSpan(IBraceCompletionSession session, bool shouldHonorAutoFormattingOnCloseBraceOption, IEnumerable<IFormattingRule> rules = null)
+        private void FormatTrackingSpan(IBraceCompletionSession session, bool shouldHonorAutoFormattingOnCloseBraceOption, IEnumerable<IFormattingRule>? rules = null)
         {
             var document = session.Document;
             var text = session.Text;
@@ -157,7 +157,7 @@ namespace RoslynPad.Roslyn.AutomaticCompletion
 
             public static readonly IFormattingRule Instance = new BraceCompletionFormattingRule();
 
-            public override AdjustNewLinesOperation GetAdjustNewLinesOperation(SyntaxToken previousToken, SyntaxToken currentToken, OptionSet optionSet, NextOperation<AdjustNewLinesOperation> nextOperation)
+            public override AdjustNewLinesOperation? GetAdjustNewLinesOperation(SyntaxToken previousToken, SyntaxToken currentToken, OptionSet optionSet, NextOperation<AdjustNewLinesOperation> nextOperation)
             {
                 // Eg Cases -
                 // new MyObject {
@@ -197,9 +197,9 @@ namespace RoslynPad.Roslyn.AutomaticCompletion
                 }
             }
 
-            public override void AddSuppressOperations(List<SuppressOperation> list, SyntaxNode node, SyntaxToken lastToken, OptionSet optionSet, NextAction<SuppressOperation> nextOperation)
+            public override void AddSuppressOperations(List<SuppressOperation> list, SyntaxNode node, OptionSet optionSet, NextAction<SuppressOperation> nextOperation)
             {
-                base.AddSuppressOperations(list, node, lastToken, optionSet, nextOperation);
+                base.AddSuppressOperations(list, node, optionSet, nextOperation);
 
                 // remove suppression rules for array and collection initializer
                 if (node.IsInitializerForArrayOrCollectionCreationExpression())

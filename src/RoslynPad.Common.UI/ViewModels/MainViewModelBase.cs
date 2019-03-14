@@ -1,19 +1,18 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Runtime.InteropServices;
-using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
+using Microsoft.CodeAnalysis;
+using NuGet.Packaging;
 using RoslynPad.Roslyn;
 using RoslynPad.Utilities;
-using NuGet.Packaging;
-using RoslynPad.UI.Services;
-using HttpClient = System.Net.Http.HttpClient;
 
 namespace RoslynPad.UI
 {
@@ -23,28 +22,29 @@ namespace RoslynPad.UI
         private readonly ITelemetryProvider _telemetryProvider;
         private readonly ICommandProvider _commands;
         private readonly DocumentFileWatcher _documentFileWatcher;
-        private static readonly Version _currentVersion = new Version(13, 3);
+        private static readonly Version _currentVersion = new Version(14, 0);
         private static readonly string _currentVersionVariant = "";
 
         public const string NuGetPathVariableName = "$NuGet";
         private const string ConfigFileName = "RoslynPad.json";
 
-        private OpenDocumentViewModel _currentOpenDocument;
+        private OpenDocumentViewModel? _currentOpenDocument;
         private bool _hasUpdate;
         private double _editorFontSize;
-        private string _searchText;
+        private string? _searchText;
         private bool _isWithinSearchResults;
         private string _documentPath;
         private bool _isInitialized;
         private DocumentViewModel _documentRoot;
+        private DocumentWatcher _documentWatcher;
+        private ImmutableArray<MetadataReference> _defaultReferences;
 
         public IApplicationSettings Settings { get; }
         public DocumentViewModel DocumentRoot
         {
             get => _documentRoot;
-            private set => SetProperty (ref _documentRoot, value);
+            private set => SetProperty(ref _documentRoot, value);
         }
-        public NuGetConfiguration NuGetConfiguration { get; }
         public RoslynHost RoslynHost { get; private set; }
 
         public bool IsInitialized
@@ -57,7 +57,9 @@ namespace RoslynPad.UI
             }
         }
 
+#pragma warning disable CS8618 // Non-nullable field is uninitialized.
         public MainViewModelBase(IServiceProvider serviceProvider, ITelemetryProvider telemetryProvider, ICommandProvider commands, IApplicationSettings settings, NuGetViewModel nugetViewModel, DocumentFileWatcher documentFileWatcher)
+#pragma warning restore CS8618 // Non-nullable field is uninitialized.
         {
             _serviceProvider = serviceProvider;
             _telemetryProvider = telemetryProvider;
@@ -75,11 +77,11 @@ namespace RoslynPad.UI
             };
 
             NuGet = nugetViewModel;
-            NuGetConfiguration = new NuGetConfiguration(NuGet.GlobalPackageFolder, NuGetPathVariableName);
 
             NewDocumentCommand = commands.Create(CreateNewDocument);
             OpenFileCommand = commands.CreateAsync(OpenFile);
             CloseCurrentDocumentCommand = commands.CreateAsync(CloseCurrentDocument);
+            CloseDocumentCommand = commands.CreateAsync<OpenDocumentViewModel>(CloseDocument);
             ClearErrorCommand = commands.Create(() => _telemetryProvider.ClearLastError());
             ReportProblemCommand = commands.Create(ReportProblem);
             EditUserDocumentPathCommand = commands.Create(EditUserDocumentPath);
@@ -109,14 +111,16 @@ namespace RoslynPad.UI
             }
         }
 
-        protected virtual IEnumerable<Assembly> CompositionAssemblies => Array.Empty<Assembly>();
+        protected virtual ImmutableArray<Assembly> CompositionAssemblies => ImmutableArray.Create(
+            typeof(MainViewModelBase).Assembly);
 
         private async Task InitializeInternal()
         {
-            RoslynHost = await Task.Run(() => new RoslynHost(NuGetConfiguration, CompositionAssemblies,
-                RoslynHostReferences.Default.With(typeNamespaceImports: new[] { typeof(Runtime.ObjectExtensions) })))
+            RoslynHost = await Task.Run(() => new RoslynHost(CompositionAssemblies,
+                RoslynHostReferences.NamespaceDefault.With(typeNamespaceImports: new[] { typeof(Runtime.ObjectExtensions) })))
                 .ConfigureAwait(true);
 
+            OpenDocumentFromCommandLine();
             await OpenAutoSavedDocuments().ConfigureAwait(true);
 
             if (HasCachedUpdate())
@@ -127,6 +131,22 @@ namespace RoslynPad.UI
             {
                 // ReSharper disable once UnusedVariable
                 var task = Task.Run(CheckForUpdates);
+            }
+        }
+
+        private void OpenDocumentFromCommandLine()
+        {
+            string[] args = Environment.GetCommandLineArgs();
+
+            if (args.Length > 1)
+            {
+                string filePath = args[1];
+
+                if (File.Exists(filePath))
+                {
+                    var document = DocumentViewModel.FromPath(filePath);
+                    OpenDocument(document);
+                }
             }
         }
 
@@ -152,7 +172,7 @@ namespace RoslynPad.UI
                 GetOpenDocumentViewModel(DocumentViewModel.FromPath(x)));
         }
 
-        private OpenDocumentViewModel GetOpenDocumentViewModel(DocumentViewModel documentViewModel)
+        private OpenDocumentViewModel GetOpenDocumentViewModel(DocumentViewModel? documentViewModel = null)
         {
             var d = _serviceProvider.GetService<OpenDocumentViewModel>();
             d.SetDocument(documentViewModel);
@@ -194,7 +214,7 @@ namespace RoslynPad.UI
         private async Task CheckForUpdates()
         {
             string latestVersionString;
-            using (var client = new HttpClient())
+            using (var client = new System.Net.Http.HttpClient())
             {
                 try
                 {
@@ -218,8 +238,9 @@ namespace RoslynPad.UI
 
         private DocumentViewModel CreateDocumentRoot()
         {
-            var root = DocumentViewModel.CreateRoot(GetUserDocumentPath(), _documentFileWatcher);
-            _documentFileWatcher.Path = root.Path;
+            _documentWatcher?.Dispose();
+            var root = DocumentViewModel.CreateRoot(GetUserDocumentPath());
+            _documentWatcher = new DocumentWatcher(_documentFileWatcher, root);
             return root;
         }
 
@@ -239,17 +260,11 @@ namespace RoslynPad.UI
 
         private string GetDefaultDocumentPath()
         {
-            string documentsPath = null;
+            string? documentsPath = null;
 
             if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             {
-                const int myDocuments = 5;
-                var stringBuilder = new StringBuilder(260);
-                var result = SHGetFolderPath(IntPtr.Zero, myDocuments, IntPtr.Zero, 0, stringBuilder);
-                if (result >= 0)
-                {
-                    documentsPath = stringBuilder.ToString();
-                }
+                documentsPath = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
             }
             else // Unix or Mac
             {
@@ -264,9 +279,6 @@ namespace RoslynPad.UI
 
             return Path.Combine(documentsPath, "RoslynPad");
         }
-
-        [DllImport("shell32.dll", BestFitMapping = false, CharSet = CharSet.Unicode)]
-        private static extern int SHGetFolderPath(IntPtr hwndOwner, int nFolder, IntPtr hToken, int dwFlags, [Out] StringBuilder lpszPath);
 
         public void EditUserDocumentPath()
         {
@@ -290,7 +302,7 @@ namespace RoslynPad.UI
 
         public ObservableCollection<OpenDocumentViewModel> OpenDocuments { get; }
 
-        public OpenDocumentViewModel CurrentOpenDocument
+        public OpenDocumentViewModel? CurrentOpenDocument
         {
             get => _currentOpenDocument;
             set
@@ -315,6 +327,8 @@ namespace RoslynPad.UI
 
         public IDelegateCommand CloseCurrentDocumentCommand { get; }
 
+        public IDelegateCommand<OpenDocumentViewModel> CloseDocumentCommand { get; }
+
         public IDelegateCommand ToggleOptimizationCommand { get; }
 
         public void OpenDocument(DocumentViewModel document)
@@ -336,12 +350,15 @@ namespace RoslynPad.UI
 
             var dialog = _serviceProvider.GetService<IOpenFileDialog>();
             dialog.Filter = new FileDialogFilter("C# Scripts", "csx");
-            if (!await dialog.ShowAsync().ConfigureAwait(true))
+            var fileNames = await dialog.ShowAsync().ConfigureAwait(true);
+            if (fileNames == null)
             {
                 return;
             }
 
-            var document = DocumentViewModel.FromPath(dialog.FileName);
+            // make sure we use the normalized path, in case the user used the wrong capitalization on Windows
+            var filePath = IOUtilities.NormalizeFilePath(fileNames.First());
+            var document = DocumentViewModel.FromPath(filePath);
             if (!document.IsAutoSave)
             {
                 var autoSavePath = document.GetAutoSavePath();
@@ -374,7 +391,11 @@ namespace RoslynPad.UI
                 return;
             }
 
-            RoslynHost.CloseDocument(document.DocumentId);
+            if (document.DocumentId != null)
+            {
+                RoslynHost.CloseDocument(document.DocumentId);
+            }
+
             OpenDocuments.Remove(document);
             document.Close();
         }
@@ -410,9 +431,10 @@ namespace RoslynPad.UI
         public async Task OnExit()
         {
             await AutoSaveOpenDocuments().ConfigureAwait(false);
+            IOUtilities.PerformIO(() => Directory.Delete(Path.Combine(Path.GetTempPath(), "RoslynPad"), recursive: true));
         }
 
-        public Exception LastError
+        public Exception? LastError
         {
             get
             {
@@ -463,7 +485,7 @@ namespace RoslynPad.UI
             return DocumentRoot.CreateNew(documentName);
         }
 
-        public string SearchText
+        public string? SearchText
         {
             get => _searchText;
             set
@@ -512,7 +534,7 @@ namespace RoslynPad.UI
                 return;
             }
 
-            Regex regex = null;
+            Regex? regex = null;
             if (SearchUsingRegex)
             {
                 regex = CreateSearchRegex();
@@ -543,7 +565,7 @@ namespace RoslynPad.UI
             return document.Name.IndexOf(SearchText, StringComparison.OrdinalIgnoreCase) >= 0;
         }
 
-        private Regex CreateSearchRegex()
+        private Regex? CreateSearchRegex()
         {
             try
             {
@@ -561,7 +583,7 @@ namespace RoslynPad.UI
             }
         }
 
-        private async Task SearchInFile(DocumentViewModel document, Regex regex)
+        private async Task SearchInFile(DocumentViewModel document, Regex? regex)
         {
             // a regex can span many lines so we need to load the entire file;
             // otherwise, search line-by-line
@@ -641,6 +663,19 @@ namespace RoslynPad.UI
 
         public IDelegateCommand ClearSearchCommand => _commands.Create(ClearSearch);
 
+        public ImmutableArray<MetadataReference> DesktopReferences
+        {
+            get
+            {
+                if (_defaultReferences.IsDefault)
+                {
+                    _defaultReferences = RoslynHostReferences.DesktopDefault.GetReferences(RoslynHost.DocumentationProviderFactory);
+                }
+
+                return _defaultReferences;
+            }
+        }
+
         private void ClearSearch()
         {
             SearchText = null;
@@ -650,6 +685,97 @@ namespace RoslynPad.UI
             foreach (var document in GetAllDocumentsForSearch(DocumentRoot))
             {
                 document.IsSearchMatch = true;
+            }
+        }
+
+        #endregion
+
+        #region Document Watcher
+
+        private class DocumentWatcher : IDisposable
+        {
+            private static readonly char[] PathSeparators = { Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar };
+
+            private readonly DocumentViewModel _documentRoot;
+            private readonly IDisposable _subscription;
+
+            public DocumentWatcher(DocumentFileWatcher watcher, DocumentViewModel documentRoot)
+            {
+                _documentRoot = documentRoot;
+                watcher.Path = documentRoot.Path;
+                _subscription = watcher.Subscribe(OnDocumentFileChanged);
+            }
+
+            public void Dispose() => _subscription.Dispose();
+
+            private void OnDocumentFileChanged(DocumentFileChanged data)
+            {
+                var pathParts = data.Path.Substring(_documentRoot.Path.Length)
+                    .Split(PathSeparators, StringSplitOptions.RemoveEmptyEntries);
+
+                var current = _documentRoot;
+
+                for (var index = 0; index < pathParts.Length; index++)
+                {
+                    if (!current.IsChildrenInitialized)
+                    {
+                        break;
+                    }
+
+                    var part = pathParts[index];
+                    var isLast = index == pathParts.Length - 1;
+
+                    var parent = current;
+                    current = current.InternalChildren[part];
+
+                    // the current part is not in the tree
+                    if (current == null)
+                    {
+                        if (data.Type != DocumentFileChangeType.Deleted)
+                        {
+                            var currentPath = isLast && data.Type == DocumentFileChangeType.Renamed
+                                ? data.NewPath
+                                : Path.Combine(_documentRoot.Path, Path.Combine(pathParts.Take(index + 1).ToArray()));
+                            Debug.Assert(currentPath != null);
+
+                            var newDocument = DocumentViewModel.FromPath(currentPath);
+                            if (!newDocument.IsAutoSave &&
+                                IsRelevantDocument(newDocument))
+                            {
+                                parent.AddChild(newDocument);
+                            }
+                        }
+
+                        break;
+                    }
+
+                    // it's the last part - the actual file
+                    if (isLast)
+                    {
+                        switch (data.Type)
+                        {
+                            case DocumentFileChangeType.Renamed:
+                                Debug.Assert(data.NewPath != null);
+                                current.ChangePath(data.NewPath);
+                                // move it to the correct place
+                                parent.InternalChildren.Remove(current);
+                                if (IsRelevantDocument(current))
+                                {
+                                    parent.AddChild(current);
+                                }
+                                break;
+                            case DocumentFileChangeType.Deleted:
+                                parent.InternalChildren.Remove(current);
+                                break;
+                        }
+                    }
+                }
+            }
+
+            private static bool IsRelevantDocument(DocumentViewModel document)
+            {
+                return document.IsFolder || string.Equals(Path.GetExtension(document.OriginalName),
+                           DocumentViewModel.DefaultFileExtension, StringComparison.OrdinalIgnoreCase);
             }
         }
 

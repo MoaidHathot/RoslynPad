@@ -25,17 +25,16 @@ namespace RoslynPad.Roslyn
         internal static readonly ImmutableArray<Assembly> DefaultCompositionAssemblies =
             ImmutableArray.Create(
                 // Microsoft.CodeAnalysis.Workspaces
-                typeof(WorkspacesResources).GetTypeInfo().Assembly,
+                typeof(WorkspacesResources).Assembly,
                 // Microsoft.CodeAnalysis.CSharp.Workspaces
-                typeof(CSharpWorkspaceResources).GetTypeInfo().Assembly,
+                typeof(CSharpWorkspaceResources).Assembly,
                 // Microsoft.CodeAnalysis.Features
-                typeof(FeaturesResources).GetTypeInfo().Assembly,
+                typeof(FeaturesResources).Assembly,
                 // Microsoft.CodeAnalysis.CSharp.Features
-                typeof(CSharpFeaturesResources).GetTypeInfo().Assembly,
+                typeof(CSharpFeaturesResources).Assembly,
                 // RoslynPad.Roslyn
-                typeof(RoslynHost).GetTypeInfo().Assembly);
+                typeof(RoslynHost).Assembly);
 
-        private readonly NuGetConfiguration _nuGetConfiguration;
         private readonly ConcurrentDictionary<DocumentId, RoslynWorkspace> _workspaces;
         private readonly ConcurrentDictionary<DocumentId, Action<DiagnosticsUpdatedArgs>> _diagnosticsUpdatedNotifiers;
         private readonly ParseOptions _parseOptions;
@@ -53,28 +52,10 @@ namespace RoslynPad.Roslyn
 
         #region Constructors
 
-        static RoslynHost()
+        public RoslynHost(IEnumerable<Assembly>? additionalAssemblies = null,
+            RoslynHostReferences? references = null)
         {
-            WorkaroundForDesktopShim(typeof(Compilation));
-            WorkaroundForDesktopShim(typeof(TaggedText));
-        }
-
-        private static void WorkaroundForDesktopShim(Type typeInAssembly)
-        {
-            // DesktopShim doesn't work on Linux, so we hack around it
-
-            typeInAssembly.GetTypeInfo().Assembly
-                .GetType("Roslyn.Utilities.DesktopShim+FileNotFoundException")
-                ?.GetRuntimeFields().FirstOrDefault(f => f.Name == "s_fusionLog")
-                ?.SetValue(null, typeof(Exception).GetRuntimeProperty(nameof(Exception.InnerException)));
-        }
-
-        public RoslynHost(NuGetConfiguration nuGetConfiguration = null,
-            IEnumerable<Assembly> additionalAssemblies = null,
-            RoslynHostReferences references = null)
-        {
-            _nuGetConfiguration = nuGetConfiguration;
-            if (references == null) references = RoslynHostReferences.Default;
+            if (references == null) references = RoslynHostReferences.Empty;
 
             _workspaces = new ConcurrentDictionary<DocumentId, RoslynWorkspace>();
             _diagnosticsUpdatedNotifiers = new ConcurrentDictionary<DocumentId, Action<DiagnosticsUpdatedArgs>>();
@@ -102,11 +83,13 @@ namespace RoslynPad.Roslyn
 
             _documentationProviderService = GetService<IDocumentationProviderService>();
 
-            DefaultReferences = references.GetReferences(_documentationProviderService.GetDocumentationProvider);
+            DefaultReferences = references.GetReferences(DocumentationProviderFactory);
             DefaultImports = references.Imports;
 
             GetService<IDiagnosticService>().DiagnosticsUpdated += OnDiagnosticsUpdated;
         }
+
+        public Func<string, DocumentationProvider> DocumentationProviderFactory => _documentationProviderService.GetDocumentationProvider;
 
         protected virtual IEnumerable<Assembly> GetDefaultCompositionAssemblies()
         {
@@ -116,7 +99,7 @@ namespace RoslynPad.Roslyn
         protected virtual ParseOptions CreateDefaultParseOptions()
         {
             return new CSharpParseOptions(kind: SourceCodeKind.Script,
-                preprocessorSymbols: PreprocessorSymbols, languageVersion: LanguageVersion.Latest);
+                preprocessorSymbols: PreprocessorSymbols, languageVersion: LanguageVersion.CSharp8);
         }
 
         public MetadataReference CreateMetadataReference(string location)
@@ -166,7 +149,7 @@ namespace RoslynPad.Roslyn
 
             return false;
         }
-        
+
         #endregion
 
         #region Documents
@@ -214,7 +197,7 @@ namespace RoslynPad.Roslyn
             _diagnosticsUpdatedNotifiers.TryRemove(documentId, out _);
         }
 
-        public Document GetDocument(DocumentId documentId)
+        public Document? GetDocument(DocumentId documentId)
         {
             if (documentId == null) throw new ArgumentNullException(nameof(documentId));
 
@@ -248,7 +231,7 @@ namespace RoslynPad.Roslyn
             return documentId;
         }
 
-        private DocumentId AddDocument(RoslynWorkspace workspace, DocumentCreationArgs args, Document previousDocument = null)
+        private DocumentId AddDocument(RoslynWorkspace workspace, DocumentCreationArgs args, Document? previousDocument = null)
         {
             var project = CreateProject(workspace.CurrentSolution, args,
                 CreateCompilationOptions(args, previousDocument == null), previousDocument?.Project);
@@ -265,11 +248,12 @@ namespace RoslynPad.Roslyn
                 _diagnosticsUpdatedNotifiers.TryAdd(documentId, args.OnDiagnosticsUpdated);
             }
 
-            if (args.OnTextUpdated != null)
+            var onTextUpdated = args.OnTextUpdated;
+            if (onTextUpdated != null)
             {
                 workspace.ApplyingTextChange += (d, s) =>
                 {
-                    if (documentId == d) args.OnTextUpdated(s);
+                    if (documentId == d) onTextUpdated(s);
                 };
             }
 
@@ -294,7 +278,8 @@ namespace RoslynPad.Roslyn
                 usings: addDefaultImports ? DefaultImports : ImmutableArray<string>.Empty,
                 allowUnsafe: true,
                 sourceReferenceResolver: new SourceFileResolver(ImmutableArray<string>.Empty, args.WorkingDirectory),
-                metadataReferenceResolver: new NuGetScriptMetadataResolver(_nuGetConfiguration, args.WorkingDirectory, useCache: true));
+                metadataReferenceResolver: new CachedScriptMetadataResolver(args.WorkingDirectory, useCache: true),
+                nullableContextOptions: NullableContextOptions.Enable);
             return compilationOptions;
         }
 
@@ -305,7 +290,7 @@ namespace RoslynPad.Roslyn
             return solution.GetDocument(id);
         }
 
-        protected virtual Project CreateProject(Solution solution, DocumentCreationArgs args, CompilationOptions compilationOptions, Project previousProject = null)
+        protected virtual Project CreateProject(Solution solution, DocumentCreationArgs args, CompilationOptions compilationOptions, Project? previousProject = null)
         {
             var name = args.Name ?? "Program" + Interlocked.Increment(ref _documentNumber);
             var id = ProjectId.CreateNewId(name);
@@ -318,9 +303,9 @@ namespace RoslynPad.Roslyn
             }
 
             solution = solution.AddProject(ProjectInfo.Create(
-                id, 
+                id,
                 VersionStamp.Create(),
-                name, 
+                name,
                 name,
                 LanguageNames.CSharp,
                 isSubmission: isScript,

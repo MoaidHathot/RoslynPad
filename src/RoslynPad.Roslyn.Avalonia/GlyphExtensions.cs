@@ -1,9 +1,8 @@
-using Avalonia.Media.Imaging;
-using Avalonia.Threading;
+using Avalonia.Controls;
+using Avalonia.Markup.Xaml;
 using RoslynPad.Roslyn.Completion;
 using RoslynPad.Roslyn.Resources;
-using System.Collections.Generic;
-using System.Reflection;
+using Avalonia.Media;
 
 namespace RoslynPad.Roslyn
 {
@@ -11,31 +10,33 @@ namespace RoslynPad.Roslyn
     {
         private static readonly GlyphService _service = new GlyphService();
 
-        public static IBitmap ToImageSource(this Glyph glyph) => _service.GetGlyphImage(glyph);
+        public static Drawing? ToImageSource(this Glyph glyph)
+        {
+            var image = _service.GetGlyphImage(glyph);
+            return image;
+        }
 
         private class GlyphService
         {
-            private readonly Dictionary<Glyph, IBitmap> _cache = new Dictionary<Glyph, IBitmap>();
+            private readonly ResourceDictionary _glyphs;
 
-            public IBitmap GetGlyphImage(Glyph glyph)
+            public GlyphService()
             {
-                Dispatcher.UIThread.VerifyAccess();
-
-                if (!_cache.TryGetValue(glyph, out var image))
+                var assembly = typeof(Glyphs).Assembly;
+                using (var stream = assembly.GetManifestResourceStream(typeof(Glyphs), $"{nameof(Glyphs)}.{nameof(Glyphs)}.xaml"))
                 {
-                    var assembly = typeof(Glyphs).GetTypeInfo().Assembly;
-                    using (var stream = assembly.GetManifestResourceStream(typeof(Glyphs).FullName + "." + glyph + ".png"))
-                    {
-                        if (stream != null)
-                        {
-                            image = new Bitmap(stream);
-                        }
-                    }
+                    _glyphs = (ResourceDictionary)new AvaloniaXamlLoader().Load(stream, assembly);
+                }
+            }
 
-                    _cache.Add(glyph, image);
+            public Drawing? GetGlyphImage(Glyph glyph)
+            {
+                if (_glyphs != null && _glyphs.TryGetValue(glyph, out var glyphImage))
+                {
+                    return glyphImage as Drawing;
                 }
 
-                return image;
+                return null;
             }
         }
     }

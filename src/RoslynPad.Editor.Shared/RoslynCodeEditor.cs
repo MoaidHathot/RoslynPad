@@ -12,7 +12,7 @@ using Avalonia;
 using Avalonia.Interactivity;
 using Avalonia.Media;
 using Avalonia.Input;
-using ImageSource = Avalonia.Media.Imaging.IBitmap;
+using ImageSource = Avalonia.Media.Drawing;
 using ModifierKeys = Avalonia.Input.InputModifiers;
 using TextCompositionEventArgs = Avalonia.Input.TextInputEventArgs;
 using RoutingStrategy = Avalonia.Interactivity.RoutingStrategies;
@@ -27,15 +27,16 @@ namespace RoslynPad.Editor
     public class RoslynCodeEditor : CodeTextEditor
     {
         private readonly TextMarkerService _textMarkerService;
-        private BraceMatcherHighlightRenderer _braceMatcherHighlighter;
-        private ContextActionsRenderer _contextActionsRenderer;
-        private IClassificationHighlightColors _classificationHighlightColors;
-        private IRoslynHost _roslynHost;
-        private DocumentId _documentId;
-        private IQuickInfoProvider _quickInfoProvider;
-        private IBraceMatchingService _braceMatchingService;
-        private IBraceCompletionProvider _braceCompletionProvider;
-        private CancellationTokenSource _braceMatchingCts;
+        private BraceMatcherHighlightRenderer? _braceMatcherHighlighter;
+        private ContextActionsRenderer? _contextActionsRenderer;
+        private IClassificationHighlightColors? _classificationHighlightColors;
+        private IRoslynHost? _roslynHost;
+        private DocumentId? _documentId;
+        private IQuickInfoProvider? _quickInfoProvider;
+        private IBraceMatchingService? _braceMatchingService;
+        private IBraceCompletionProvider? _braceCompletionProvider;
+        private CancellationTokenSource? _braceMatchingCts;
+        private RoslynHighlightingColorizer? _colorizer;
 
         public RoslynCodeEditor()
         {
@@ -45,6 +46,15 @@ namespace RoslynPad.Editor
             TextArea.Caret.PositionChanged += CaretOnPositionChanged;
             TextArea.TextEntered += OnTextEntered;
         }
+
+        public bool IsBraceCompletionEnabled
+        {
+            get { return this.GetValue(IsBraceCompletionEnabledProperty); }
+            set { this.SetValue(IsBraceCompletionEnabledProperty, value); }
+        }
+
+        public static readonly StyledProperty<bool> IsBraceCompletionEnabledProperty =
+            CommonProperty.Register<RoslynCodeEditor, bool>(nameof(IsBraceCompletionEnabled), defaultValue: true);
 
         public static readonly StyledProperty<ImageSource> ContextActionsIconProperty = CommonProperty.Register<RoslynCodeEditor, ImageSource>(
             nameof(ContextActionsIcon), onChanged: OnContextActionsIconChanged);
@@ -78,9 +88,10 @@ namespace RoslynPad.Editor
 
         private void OnTextEntered(object sender, TextCompositionEventArgs e)
         {
-            if (e.Text.Length == 1)
+            if (IsBraceCompletionEnabled && e.Text.Length == 1 && _braceCompletionProvider != null && _roslynHost != null &&
+                _documentId != null && _roslynHost.GetDocument(_documentId) is Document document)
             {
-                _braceCompletionProvider.TryComplete(_roslynHost.GetDocument(_documentId), CaretOffset);
+                _braceCompletionProvider.TryComplete(document, CaretOffset);
             }
         }
 
@@ -101,14 +112,14 @@ namespace RoslynPad.Editor
             OnCreatingDocument(creatingDocumentArgs);
 
             _documentId = creatingDocumentArgs.DocumentId ??
-                roslynHost.AddDocument(new DocumentCreationArgs(avalonEditTextContainer, workingDirectory, 
+                roslynHost.AddDocument(new DocumentCreationArgs(avalonEditTextContainer, workingDirectory,
                     args => ProcessDiagnostics(args), text => avalonEditTextContainer.UpdateText(text)));
 
             AppendText(documentText);
             Document.UndoStack.ClearAll();
             AsyncToolTipRequest = OnAsyncToolTipRequest;
 
-            TextArea.TextView.LineTransformers.Insert(0, new RoslynHighlightingColorizer(_documentId, _roslynHost, _classificationHighlightColors));
+            RefreshHighlighting();
 
             _contextActionsRenderer = new ContextActionsRenderer(this, _textMarkerService) { IconImage = ContextActionsIcon };
             _contextActionsRenderer.Providers.Add(new RoslynContextActionProvider(_documentId, _roslynHost));
@@ -121,8 +132,27 @@ namespace RoslynPad.Editor
             return _documentId;
         }
 
+        public void RefreshHighlighting()
+        {
+            if (_colorizer != null)
+            {
+                TextArea.TextView.LineTransformers.Remove(_colorizer);
+            }
+
+            if (_documentId != null && _roslynHost != null && _classificationHighlightColors != null)
+            {
+                _colorizer = new RoslynHighlightingColorizer(_documentId, _roslynHost, _classificationHighlightColors);
+                TextArea.TextView.LineTransformers.Insert(0, _colorizer);
+            }
+        }
+
         private async void CaretOnPositionChanged(object sender, EventArgs eventArgs)
         {
+            if (_roslynHost == null || _documentId == null || _braceMatcherHighlighter == null)
+            {
+                return;
+            }
+
             _braceMatchingCts?.Cancel();
 
             if (_braceMatchingService == null) return;
@@ -132,6 +162,11 @@ namespace RoslynPad.Editor
             _braceMatchingCts = cts;
 
             var document = _roslynHost.GetDocument(_documentId);
+            if (document == null)
+            {
+                return;
+            }
+
             var text = await document.GetTextAsync().ConfigureAwait(false);
             var caretOffset = CaretOffset;
             if (caretOffset <= text.Length)
@@ -176,8 +211,18 @@ namespace RoslynPad.Editor
 
         private async Task OnAsyncToolTipRequest(ToolTipRequestEventArgs arg)
         {
+            if (_roslynHost == null || _documentId == null || _quickInfoProvider == null)
+            {
+                return;
+            }
+
             // TODO: consider invoking this with a delay, then showing the tool-tip without one
             var document = _roslynHost.GetDocument(_documentId);
+            if (document == null)
+            {
+                return;
+            }
+
             var info = await _quickInfoProvider.GetItemAsync(document, arg.Position, CancellationToken.None).ConfigureAwait(true);
             if (info != null)
             {
@@ -233,7 +278,7 @@ namespace RoslynPad.Editor
                 case DiagnosticSeverity.Error:
                     return Colors.Red;
                 default:
-                    throw new ArgumentOutOfRangeException();
+                    throw new ArgumentOutOfRangeException(nameof(diagnosticData));
             }
         }
 
@@ -266,6 +311,6 @@ namespace RoslynPad.Editor
 
         public Action<DiagnosticsUpdatedArgs> ProcessDiagnostics { get; }
 
-        public DocumentId DocumentId { get; set; }
+        public DocumentId? DocumentId { get; set; }
     }
 }
